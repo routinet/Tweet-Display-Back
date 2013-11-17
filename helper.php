@@ -21,8 +21,8 @@ class ModTweetDisplayBackHelper
 	/**
 	 * OAuth bearer token for use in API requests
 	 *
-	 * @var    string
-	 * @since  3.0
+	 * @var    BDBearer
+	 * @since  3.0.4-routinet-fork
 	 */
 	protected $bearer;
 
@@ -30,7 +30,16 @@ class ModTweetDisplayBackHelper
 	 * BDHttp connector
 	 *
 	 * @var    BDHttp
+	 * @since  3.0.4-routinet-fork
+	 */
+	protected $connector;
+
+	/**
+	 * BDHttp connector
+	 *
+	 * @var    BDHttp
 	 * @since  3.0
+	 * @removed 3.0.4-routinet-fork The name 'connector' is used everywhere else
 	 */
 	protected $http;
 
@@ -128,6 +137,9 @@ class ModTweetDisplayBackHelper
 
 		// Instantiate our BDHttp object
 		$this->connector = BDHttpFactory::getHttp($options, $connector);
+		
+		// Instantiate the bearer token
+		$this->bearer = new BDBearer($this->params, $this->connector);
 	}
 
 	/**
@@ -259,7 +271,6 @@ class ModTweetDisplayBackHelper
 
 			return $this->twitter;
 		}
-
 		// Make sure we've got an array of data
 		elseif (is_array($obj))
 		{
@@ -332,7 +343,6 @@ class ModTweetDisplayBackHelper
 				$this->twitter['error']['messages'][] = $error->message;
 			}
 		}
-
 		// Make sure we've got an array of data
 		elseif (is_array($obj))
 		{
@@ -377,40 +387,12 @@ class ModTweetDisplayBackHelper
 		// Get the data
 		try
 		{
-			// If we haven't retrieved the bearer yet, get it if in the site application
-			if (($this->bearer == null) && JFactory::getApplication()->isSite())
-			{
-				$cacheFile = JPATH_CACHE . '/tweetdisplayback_bearer.json';
-
-				// Check if we have cached data and use it if unexpired
-				if (!file_exists($cacheFile) || (time() - @filemtime($cacheFile) > 86400))
-				{
-					$response = $this->connector->get('http://tdbtoken.gopagoda.com/tokenRequest.php');
-
-					if ($response->code == 200)
-					{
-						$this->bearer = base64_decode($response->body);
-					}
-					else
-					{
-						throw new RuntimeException('Could not retrieve bearer token');
-					}
-
-					// Write the cache
-					file_put_contents($cacheFile, $this->bearer);
-				}
-				else
-				{
-					// Render from the cached data
-					$this->bearer = file_get_contents($cacheFile);
-				}
-			}
-
 			$headers = array(
-				'Authorization' => $this->bearer
-			);
+				'Authorization' => "Bearer {$this->bearer->token}"
+			); 
 
 			$response = $this->connector->get($req, $headers);
+  		//die(time().'<br />'.var_export($response,1));
 		}
 		catch (Exception $e)
 		{
@@ -491,7 +473,6 @@ class ModTweetDisplayBackHelper
 
 					return;
 				}
-
 				// Check that we have the JSON, otherwise set an error
 				elseif (!$obj)
 				{
@@ -510,13 +491,14 @@ class ModTweetDisplayBackHelper
 					file_put_contents(JPATH_CACHE . '/tweetdisplayback_user-' . $this->moduleId . '.json', $data);
 				}
 			}
-		}
+			/* removed as redundant logic.  Joined to same if() above
+			/*		}
 
-		/*
+		 /*
 		 * Header info
 		 */
-		if ($this->params->get('headerDisplay', 1) == 1)
-		{
+		 /*		if ($this->params->get('headerDisplay', 1) == 1)
+		 { */
 			if ($this->params->get('headerUser', 1) == 1)
 			{
 				// Check if the Intents action is bypassed
@@ -542,7 +524,7 @@ class ModTweetDisplayBackHelper
 				// Append the list name if being pulled
 				if ($feed == 'list')
 				{
-					$this->twitter['header']->user .= ' - <a href="' . $scheme . 'twitter.com/' . $uname . '/' . $flist . '" rel="nofollow">' . $list . ' list</a>';
+					$this->twitter['header']->user .= ' - <a href="' . $scheme .'twitter.com/' . $uname . '/' . $flist . '" rel="nofollow">' . $list . ' list</a>';
 				}
 			}
 
@@ -584,20 +566,20 @@ class ModTweetDisplayBackHelper
 			if ($feed != 'list')
 			{
 				$followParams  = 'screen_name=' . $uname;
-				$followParams .= '&amp;lang=' . substr(JFactory::getLanguage()->getTag(), 0, 2);
+				$followParams .= '&lang=' . substr(JFactory::getLanguage()->getTag(), 0, 2);
 
 				if ($this->params->get('footerFollowCount', '1') == '1')
 				{
-					$followParams .= '&amp;show_count=true';
+					$followParams .= '&show_count=true';
 				}
 				else
 				{
-					$followParams .= '&amp;show_count=false';
+					$followParams .= '&show_count=false';
 				}
 
-				$followParams .= '&amp;show_screen_name=' . (bool) $this->params->get('footerFollowUser', 1);
+				$followParams .= '&show_screen_name=' . (bool) $this->params->get('footerFollowUser', 1);
 
-				$iframe = '<iframe src="' . $scheme . 'platform.twitter.com/widgets/follow_button.html?' . $followParams . '" style="width: 300px; height: 20px;"></iframe>';
+				$iframe = '<iframe allowtransparency="true" frameborder="0" scrolling="no" src="' . $scheme . 'platform.twitter.com/widgets/follow_button.html?' . $followParams . '" style="width: 300px; height: 20px;"></iframe>';
 
 				$this->twitter['footer']->follow_me = '<div class="TDB-footer-follow-link">' . $iframe . '</div>';
 			}
@@ -680,10 +662,23 @@ class ModTweetDisplayBackHelper
 						// Tweets which contains @mentions or @mentions+@reply
 						$tweetContainsMention = $tweetContainsMentionAndOrReply && !$tweetOnlyReply;
 
+						// Filter retweets
+						if ($showRetweets == 0)
+						{
+							if (!$tweetIsRetweet)
+							{
+								$this->processItem($o, $i);
+
+								// Modify counts
+								$count--;
+								$i++;
+							}
+						}
+
 						// Filter @mentions and @replies, leaving retweets unchanged
 						if ($showMentions == 0 && $showReplies == 0)
 						{
-							if (!$tweetContainsMentionAndOrReply || (isset($o->retweeted_status) && $showRetweets == 1))
+							if (!$tweetContainsMentionAndOrReply || isset($o->retweeted_status))
 							{
 								$this->processItem($o, $i);
 
@@ -699,7 +694,7 @@ class ModTweetDisplayBackHelper
 							// Filter @mentions only leaving @replies and retweets unchanged
 							if ($showMentions == 0)
 							{
-								if (!$tweetContainsMention || (isset($o->retweeted_status) && $showRetweets == 1))
+								if (!$tweetContainsMention || isset($o->retweeted_status))
 								{
 									$this->processItem($o, $i);
 
@@ -713,19 +708,6 @@ class ModTweetDisplayBackHelper
 							if ($showReplies == 0)
 							{
 								if (!$tweetContainsReply)
-								{
-									$this->processItem($o, $i);
-
-									// Modify counts
-									$count--;
-									$i++;
-								}
-							}
-
-							// Filter retweets
-							if ($showRetweets == 0)
-							{
-								if (!$tweetIsRetweet)
 								{
 									$this->processItem($o, $i);
 
@@ -817,7 +799,6 @@ class ModTweetDisplayBackHelper
 			{
 				$userURL = $scheme . 'twitter.com/intent/user?screen_name=' . $tweetedBy;
 			}
-
 			$this->twitter['tweets']->$i->user = '<strong><a href="' . $userURL . '" rel="nofollow">' . $tweetedBy . '</a>' . $this->params->get('tweetUserSeparator') . '</strong>';
 		}
 
@@ -944,7 +925,6 @@ class ModTweetDisplayBackHelper
 				{
 					$mentionURL = $scheme . 'twitter.com/intent/user?screen_name=' . $mention->screen_name;
 				}
-
 				$this->twitter['tweets']->$i->text = str_ireplace('@' . $mention->screen_name, '@<a class="userlink" href="' . $mentionURL . '" rel="nofollow">' . $mention->screen_name . '</a>', $this->twitter['tweets']->$i->text);
 			}
 
@@ -972,4 +952,5 @@ class ModTweetDisplayBackHelper
 
 		return $list;
 	}
+	
 }
