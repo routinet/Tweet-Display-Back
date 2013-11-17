@@ -392,7 +392,6 @@ class ModTweetDisplayBackHelper
 			); 
 
 			$response = $this->connector->get($req, $headers);
-  		//die(time().'<br />'.var_export($response,1));
 		}
 		catch (Exception $e)
 		{
@@ -566,18 +565,18 @@ class ModTweetDisplayBackHelper
 			if ($feed != 'list')
 			{
 				$followParams  = 'screen_name=' . $uname;
-				$followParams .= '&lang=' . substr(JFactory::getLanguage()->getTag(), 0, 2);
+				$followParams .= '&amp;lang=' . substr(JFactory::getLanguage()->getTag(), 0, 2);
 
 				if ($this->params->get('footerFollowCount', '1') == '1')
 				{
-					$followParams .= '&show_count=true';
+					$followParams .= '&amp;show_count=true';
 				}
 				else
 				{
-					$followParams .= '&show_count=false';
+					$followParams .= '&amp;show_count=false';
 				}
 
-				$followParams .= '&show_screen_name=' . (bool) $this->params->get('footerFollowUser', 1);
+				$followParams .= '&amp;show_screen_name=' . (bool) $this->params->get('footerFollowUser', 1);
 
 				$iframe = '<iframe allowtransparency="true" frameborder="0" scrolling="no" src="' . $scheme . 'platform.twitter.com/widgets/follow_button.html?' . $followParams . '" style="width: 300px; height: 20px;"></iframe>';
 
@@ -678,7 +677,7 @@ class ModTweetDisplayBackHelper
 						// Filter @mentions and @replies, leaving retweets unchanged
 						if ($showMentions == 0 && $showReplies == 0)
 						{
-							if (!$tweetContainsMentionAndOrReply || isset($o->retweeted_status))
+							if (!$tweetContainsMentionAndOrReply || (isset($o->retweeted_status) && $showRetweets == 1))
 							{
 								$this->processItem($o, $i);
 
@@ -694,7 +693,7 @@ class ModTweetDisplayBackHelper
 							// Filter @mentions only leaving @replies and retweets unchanged
 							if ($showMentions == 0)
 							{
-								if (!$tweetContainsMention || isset($o->retweeted_status))
+								if (!$tweetContainsMention || (isset($o->retweeted_status) && $showRetweets == 1))
 								{
 									$this->processItem($o, $i);
 
@@ -717,7 +716,21 @@ class ModTweetDisplayBackHelper
 								}
 							}
 
-							// Somehow, we got this far; process the tweet
+              // Filter retweets
+
+-             if ($showRetweets == 0)
+              {
+                if (!$tweetIsRetweet)
+                {
+                  $this->processItem($o, $i);
+
+                  // Modify counts
+                  $count--;
+                  $i++;
+                }
+              }
+
+-							// Somehow, we got this far; process the tweet
 							if ($showMentions == 1 && $showReplies == 1 && $showRetweets == 1)
 							{
 								// No filtering required
