@@ -718,7 +718,7 @@ class ModTweetDisplayBackHelper
 
               // Filter retweets
 
--             if ($showRetweets == 0)
+             if ($showRetweets == 0)
               {
                 if (!$tweetIsRetweet)
                 {
@@ -730,7 +730,7 @@ class ModTweetDisplayBackHelper
                 }
               }
 
--							// Somehow, we got this far; process the tweet
+							// Somehow, we got this far; process the tweet
 							if ($showMentions == 1 && $showReplies == 1 && $showRetweets == 1)
 							{
 								// No filtering required
